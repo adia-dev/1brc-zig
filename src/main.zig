@@ -1,24 +1,30 @@
 const std = @import("std");
+const fs = std.fs;
 
 pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const file_name = "/Users/adiadev/Projects/Dev/zig/1rbc-zig/src/data/weather_stations.csv";
+    const file = try fs.cwd().openFile(file_name, .{});
+    defer file.close();
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+    var buf_reader = std.io.bufferedReader(file.reader());
+    const reader = buf_reader.reader();
 
-    try bw.flush(); // don't forget to flush!
-}
+    var line = std.ArrayList(u8).init(allocator);
+    defer line.deinit();
 
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+    const writer = line.writer();
+    var line_no: usize = 1;
+    while (reader.streamUntilDelimiter(writer, '\n', null)) : (line_no += 1) {
+        // Clear the line so we can reuse it.
+        defer line.clearRetainingCapacity();
+
+        std.debug.print("{s}\n", .{line.items});
+    } else |err| switch (err) {
+        error.EndOfStream => {}, // Continue on
+        else => return err, // Propagate error
+    }
 }
