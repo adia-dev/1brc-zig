@@ -1,6 +1,6 @@
 const std = @import("std");
 const fs = std.fs;
-const measurements = @embedFile("./data/measurements_1000000.txt");
+const measurements = @embedFile("./data/measurements_10000000.txt");
 
 const WeatherInfo = struct {
     city: []const u8,
