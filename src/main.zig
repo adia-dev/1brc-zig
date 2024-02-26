@@ -1,30 +1,60 @@
 const std = @import("std");
 const fs = std.fs;
+const measurements = @embedFile("./data/measurements.txt");
+
+const WeatherInfo = struct {
+    city: []const u8,
+    min: f32 = std.math.inf(f32),
+    sum: f32 = 0.0,
+    max: f32 = -std.math.inf(f32),
+    count: u32 = 0,
+
+    pub fn init(city: []const u8, weather: f32) WeatherInfo {
+        return .{ .city = city, .min = weather, .max = weather, .sum = weather, .count = 1 };
+    }
+
+    pub fn format(self: WeatherInfo, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = options;
+        _ = fmt;
+        try std.fmt.format(writer, "{s};{d:.1};{d:.1};{d:.1}", .{ self.city, self.min, self.sum / @as(f32, @floatFromInt(self.count)), self.max });
+    }
+};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const file_name = "/Users/adiadev/Projects/Dev/zig/1rbc-zig/src/data/weather_stations.csv";
-    const file = try fs.cwd().openFile(file_name, .{});
-    defer file.close();
+    var store = std.StringHashMap(WeatherInfo).init(allocator);
+    defer store.deinit();
 
-    var buf_reader = std.io.bufferedReader(file.reader());
-    const reader = buf_reader.reader();
+    var start: usize = 0;
+    var i: usize = 0;
+    while (i < measurements.len) : (i += 1) {
+        while (i < measurements.len and measurements[i] != '\n') : (i += 1) {}
+        var j = start;
+        while (j < measurements.len and measurements[j] != ';') : (j += 1) {}
 
-    var line = std.ArrayList(u8).init(allocator);
-    defer line.deinit();
+        const city = measurements[start..j];
+        const weather = measurements[(j + 1)..i];
+        const weather_f32: f32 = try std.fmt.parseFloat(f32, weather);
 
-    const writer = line.writer();
-    var line_no: usize = 1;
-    while (reader.streamUntilDelimiter(writer, '\n', null)) : (line_no += 1) {
-        // Clear the line so we can reuse it.
-        defer line.clearRetainingCapacity();
+        if (store.getPtr(city)) |entry| {
+            entry.min = @min(entry.min, weather_f32);
+            entry.sum += weather_f32;
+            entry.count += 1;
+            entry.max = @max(entry.max, weather_f32);
+        } else {
+            try store.put(city, WeatherInfo.init(city, weather_f32));
+        }
 
-        std.debug.print("{s}\n", .{line.items});
-    } else |err| switch (err) {
-        error.EndOfStream => {}, // Continue on
-        else => return err, // Propagate error
+        // skip the newline
+        i += 1;
+        start = i;
+    }
+
+    var it = store.iterator();
+    while (it.next()) |entry| {
+        std.debug.print("{}\n", .{entry.value_ptr.*});
     }
 }
