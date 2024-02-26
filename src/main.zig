@@ -1,6 +1,6 @@
 const std = @import("std");
 const fs = std.fs;
-const measurements = @embedFile("./data/measurements.txt");
+const measurements = @embedFile("./data/measurements_20.txt");
 
 const WeatherInfo = struct {
     city: []const u8,
@@ -25,17 +25,20 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    const start = std.time.nanoTimestamp();
+
     var store = std.StringHashMap(WeatherInfo).init(allocator);
     defer store.deinit();
 
-    var start: usize = 0;
+    var begin: usize = 0;
     var i: usize = 0;
+    var line_count: u32 = 0;
     while (i < measurements.len) : (i += 1) {
         while (i < measurements.len and measurements[i] != '\n') : (i += 1) {}
-        var j = start;
+        var j = begin;
         while (j < measurements.len and measurements[j] != ';') : (j += 1) {}
 
-        const city = measurements[start..j];
+        const city = measurements[begin..j];
         const weather = measurements[(j + 1)..i];
         const weather_f32: f32 = try std.fmt.parseFloat(f32, weather);
 
@@ -50,11 +53,22 @@ pub fn main() !void {
 
         // skip the newline
         i += 1;
-        start = i;
+        line_count += 1;
+        begin = i;
     }
 
+    const end = std.time.nanoTimestamp();
+    const elapsed_time = @as(f32, @floatFromInt((end - start))) / 1_000_000_000.0;
+
     var it = store.iterator();
+    var entry_count: u32 = 0;
     while (it.next()) |entry| {
         std.debug.print("{}\n", .{entry.value_ptr.*});
+        entry_count += 1;
     }
+
+    std.debug.print("\n\n===============================\n", .{});
+    std.debug.print(" - {d} Line parsed\n", .{line_count});
+    std.debug.print(" - {d} Entries computed\n", .{entry_count});
+    std.debug.print(" - Took: {d:.2} seconds.\n", .{elapsed_time});
 }
